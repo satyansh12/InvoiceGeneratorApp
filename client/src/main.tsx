@@ -1,4 +1,9 @@
 import React from "react";
+// Suppress useLayoutEffect warnings when not running in a browser environment
+if (typeof window === 'undefined') {
+    React.useLayoutEffect = React.useEffect;
+}
+
 import ReactDOM from "react-dom/client";
 import {createBrowserRouter, RouterProvider, Routes, Route} from "react-router-dom";
 // index.js

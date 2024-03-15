@@ -9,8 +9,9 @@ const invoiceRoutes = require("./routes/invoices");
 const PORT = process.env.PORT || 3100;
 const app = express();
 // Middleware
-app.use(express.json());
-app.use(bodyParser.urlencoded({extended: true}));
+app.use(express.json({ limit: '50mb' }));
+app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
+
 // Enable CORS for all routes with specific options
 // Enable CORS for all routes with unrestricted access
 app.use(cors({

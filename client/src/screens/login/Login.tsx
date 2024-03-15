@@ -32,7 +32,7 @@ const LoginForm: React.FC = () => {
       const token = response.data.token;
       if (token) {
         localStorage.setItem("jwt", token);
-        navigate("/board");
+        navigate("/add-products");
       } else {
         toast.error('Login failed. Please try again.');
       }

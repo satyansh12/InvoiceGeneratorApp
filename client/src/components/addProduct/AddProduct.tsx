@@ -1,13 +1,19 @@
 import React, {useEffect, useState} from 'react';
 import "./AddProduct.module.css"
 import LevitationLogo from "./../../assets/images/levitation_logo.svg"
-import {Link} from "react-router-dom";
+import {Link, useNavigate} from "react-router-dom";
 import axios from "axios";
 import {toast, ToastContainer} from "react-toastify";
 import 'react-toastify/dist/ReactToastify.css';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
+import {useIsomorphicLayoutEffect} from "../../hooks/useIsomorphicLayoutEffect.ts"; // Import ReactDOMServer
 
 const AddProduct = () => {
+    const [isClient, setIsClient] = useState(false);
+
     const jwtToken = localStorage.getItem("jwt");
+    const navigate = useNavigate();
     const [userId, setUserId] = useState(null);
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [products, setProducts] = useState([]);
@@ -19,13 +25,21 @@ const AddProduct = () => {
     const [total, setTotal] = useState(0);
     const [gst, setGst] = useState(0);
     const [grandTotal, setGrandTotal] = useState(0);
-
+    //
     const showErrorToast = () => {
         toast.error("Error Notification !");
     };
     const showSuccessInvoiceToast = () => {
         toast.success("Created Invoice Successfully \n Goto Invoices Section to Download",{});
     };
+    useEffect(() => {
+        // This effect will run only once, after the initial render, setting isClient to true
+        setIsClient(true);
+    }, []);
+    useIsomorphicLayoutEffect(() => {
+        // Logic that requires useLayoutEffect, e.g., DOM measurements, updates that need to be synchronous with painting
+        console.log('Component has mounted or updated');
+    }, []); // Dependency array
     useEffect(() => {
         const checkIsLoggedIn = async () => {
             try {
@@ -41,6 +55,9 @@ const AddProduct = () => {
                     setIsLoggedIn(false);
                 }
             } catch (error) {
+                localStorage.removeItem("jwt");
+                navigate("/register");
+                setIsLoggedIn(false);
                 console.error('Error fetching login status:', error);
             }
         };
@@ -48,19 +65,20 @@ const AddProduct = () => {
     }, []);
 
     useEffect(() => {
-        // Recalculate totals whenever products change
-        const newTotal = products.reduce((acc, curr) => acc + (curr.quantity * curr.rate), 0);
+        // Recalculate totals whenever products change or the current product's quantity or rate changes
+        const newTotal = products.reduce((acc, curr) => acc + (curr.quantity * curr.rate), 0) + (product.quantity * product.rate);
         const newGst = newTotal * 0.18; // GST is 18%
         const newGrandTotal = newTotal + newGst;
 
         setTotal(newTotal);
         setGst(newGst);
         setGrandTotal(newGrandTotal);
-    }, [products]); // Dependency array includes products
+    }, [products, product.quantity, product.rate]); // Dependency array includes products, product.quantity, and product.rate
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
-        setProduct({ ...product, [name]: value });
+        const updatedValue = name === 'quantity' || name === 'rate' ? Number(value) : value; // Ensure numerical values are treated as numbers
+        setProduct({ ...product, [name]: updatedValue });
     };
 
     // Function to validate product input fields
@@ -74,35 +92,61 @@ const AddProduct = () => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        // Check if product fields are valid
         if (validateProductInput()) {
             const total = product.quantity * product.rate;
             const newProduct = { ...product, total };
-            setProducts([...products, newProduct]);
-            setProduct({ name: '', quantity: 0, rate: 0 }); // Reset form
+            // setProducts([...products, newProduct]);
+            // setProduct({ name: '', quantity: 0, rate: 0 });
         }
     };
-
     const handleGenerateInvoice = async () => {
-            try {
-                // Submit the valid products as an invoice
-                const response = await axios.post('http://localhost:3100/api/invoices', {
-                    products: products,
-                    createdBy: userId
-                }, {
-                    headers: {
-                        Authorization: `Bearer ${jwtToken}`,
-                    },
+        try {
+            // Submit the valid products as an invoice
+            const response = await axios.post('http://localhost:3100/api/invoices', {
+                products: products,
+                createdBy: userId,
+            }, {
+                headers: {
+                    Authorization: `Bearer ${jwtToken}`,
+                },
+            });
+            console.log('Invoice generated successfully:', response.data);
+                html2canvas(document.querySelector("#capture")).then(canvas => {
+                const imgData = canvas.toDataURL('image/png');
+                const pdf = new jsPDF({
+                    orientation: 'p',
+                    unit: 'mm',
+                    format: 'a4',
                 });
-                console.log('Invoice generated successfully:', response.data);
+
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = pdf.internal.pageSize.getHeight();
+                const canvasAspectRatio = canvas.height / canvas.width;
+                const pdfAspectRatio = pdfHeight / pdfWidth;
+                let imgHeight = pdfHeight;
+                let imgWidth = pdfWidth;
+                if (canvasAspectRatio > pdfAspectRatio) {
+                    imgWidth = pdfHeight / canvasAspectRatio;
+                } else {
+                    imgHeight = pdfWidth * canvasAspectRatio;
+                }
+                const x = (pdfWidth - imgWidth) / 2;
+                const y = (pdfHeight - imgHeight) / 2;
+                pdf.addImage(imgData, 'PNG', x, y, imgWidth, imgHeight);
+                pdf.save('invoice.pdf');
+            });
+            //  todo : do have a slight delay before executing following
+            // Delay before executing the following
+            setTimeout(() => {
                 setProducts([]); // Clear products after saving to prevent duplicate submissions
                 showSuccessInvoiceToast();
-            } catch (error) {
-                showErrorToast();
-                console.error('Error generating invoice:', error);
-            }
-    };
-    // Splitting the message by `\n` to handle new lines correctly
+            }, 1000); // Delay of 1000 milliseconds (1 second)
+
+        } catch (error) {
+            showErrorToast();
+            console.error('Error generating invoice:', error);
+        }
+    };    // Splitting the message by `\n` to handle new lines correctly
     const message = `Terms and Conditions
 we are happy to supply any further information you may need and trust that you call on us to fill your order.
 wich will recieve our pormpt and carefull attention`.split('\n').map((line, index) => (
@@ -111,11 +155,10 @@ wich will recieve our pormpt and carefull attention`.split('\n').map((line, inde
     ));
 
     return (
-        <div className="flex flex-col justify-between h-screen bg-white shadow-lg rounded-lg p-8 w-3/5 mx-auto"
+        <div id="capture" className="flex flex-col justify-between h-screen bg-white shadow-lg rounded-lg p-8 w-3/5 mx-auto"
              style={{paddingTop: '2%'}}>
             <div
                  style={{paddingTop: '2%'}}>
-                {/* << make this div , expanded, and keep the content alignment to top, start .. */}
                 <div>
                     <div className="flex justify-between items-center p-4">
                         <div>
@@ -192,36 +235,42 @@ wich will recieve our pormpt and carefull attention`.split('\n').map((line, inde
                         </div>
                         <div className="flex justify-between">
                             <button type="submit"
+                                    data-html2canvas-ignore="true"
                                     className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
                                 Add Product
                             </button>
                             <button onClick={handleGenerateInvoice}
+                                    data-html2canvas-ignore="true"
                                     className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
                                 Generate Invoice
                             </button>
                         </div>
                     </form>
-                    <div className="mt-4">
-                        <div className="flex justify-between">
-                            <span>Total:</span>
-                            <span>INR {total.toFixed(2)}</span>
+                    <div className="mt-4 text-right w-1/2 ml-auto">
+                        <div className="flex justify-between p-4">
+                            <span className="text-lg font-bold">Total:</span>
+                            <span className="text-lg font-bold">INR {total.toFixed(2)}</span>
                         </div>
-                        <div className="flex justify-between">
+                        <div className="flex justify-between p-4 py-2 italic" style={{fontSize: '70%'}}>
                             <span>GST (18%):</span>
                             <span>{gst.toFixed(2)}</span>
                         </div>
-                        <div className="flex justify-between">
-                            <span>Grand Total:</span>
-                            <span>INR {grandTotal.toFixed(2)}</span>
+                        <div>
+                            <hr className="my-2 bg-gray-200 border-0 h-px"/>
+                            <div className="flex justify-between p-4">
+                                <span className="text-lg font-bold">Grand Total:</span>
+                                <span className="text-lg font-bold">INR {grandTotal.toFixed(2)}</span>
+                            </div>
+                            <hr className="my-2 bg-gray-200 border-0 h-px" />
                         </div>
                     </div>
                 </div>
-                {/* << that would automatically place,, this div at the bottom  */}
             </div>
-            <div className="self-stretch bg-black text-white text-left p-4 rounded-full">
+            <div className="self-stretch bg-black text-white text-left px-14 py-6 rounded-full text-[0.7rem]"
+                 style={{backgroundImage: 'linear-gradient(to bottom, #2f2f2f, #191919)'}}>
                 {message}
             </div>
-            <ToastContainer/>
+            {isClient && <ToastContainer />}
         </div>
     );
 };

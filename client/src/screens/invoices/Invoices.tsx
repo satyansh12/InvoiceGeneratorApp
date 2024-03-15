@@ -16,6 +16,7 @@ const Invoices = () => {
                         Authorization: `Bearer ${jwtToken}`,
                     },
                 });
+                console.log("invoices" , invoices);
                 setInvoices(response.data.sort((a, b) => dayjs(b.date) - dayjs(a.date)));
             } catch (error) {
                 console.error('Error fetching invoices:', error);
@@ -25,6 +26,34 @@ const Invoices = () => {
 
         fetchInvoices();
     }, [jwtToken]);
+
+    useEffect(() => {
+        console.log(
+            invoices
+        );
+    }, [invoices]);
+
+    const downloadInvoice = async (invoiceId) => {
+        try {
+            const response = await axios.get(`http://localhost:3100/api/invoices/download/${invoiceId}`, {
+                headers: {
+                    Authorization: `Bearer ${jwtToken}`,
+                },
+                responseType: 'blob', // Important: indicates that the response should be treated as a Blob
+            });
+            const fileURL = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+            const fileLink = document.createElement('a');
+            fileLink.href = fileURL;
+            fileLink.setAttribute('download', `invoice-${invoiceId}.pdf`);
+            document.body.appendChild(fileLink);
+
+            fileLink.click();
+            fileLink.remove(); // Clean up
+        } catch (error) {
+            console.error('Error downloading invoice:', error);
+            toast.error('Error downloading invoice');
+        }
+    };
 
     return (
         <div className="flex flex-col items-center justify-center min-h-screen py-2">
@@ -45,11 +74,11 @@ const Invoices = () => {
                         <tbody>
                         {invoices.map((invoice, index) => (
                             <tr key={index} className="border-b">
-                                <td className="px-4 py-2">{invoice.id}</td>
+                                <td className="px-4 py-2">{invoice._id}</td>
                                 <td className="px-4 py-2">{dayjs(invoice.date).format('DD/MM/YYYY')}</td>
                                 <td className="px-4 py-2">{invoice.total}</td>
                                 <td className="px-4 py-2">
-                                    <button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                                    <button onClick={() => downloadInvoice(invoice._id)} className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
                                         Download
                                     </button>
                                 </td>
@@ -59,7 +88,7 @@ const Invoices = () => {
                     </table>
                 </div>
             </div>
-            <ToastContainer />
+            {/*<ToastContainer />*/}
         </div>
     );
 };
